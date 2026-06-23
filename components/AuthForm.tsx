@@ -29,6 +29,26 @@ const authFormSchema = (type: FormType) => {
   });
 };
 
+const getAuthErrorMessage = (error: unknown) => {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = String(error.code);
+
+    if (code === "auth/too-many-requests") {
+      return "Too many sign-in attempts. Please wait a few minutes and try again.";
+    }
+
+    if (code === "auth/wrong-password") {
+      return "Incorrect email or password.";
+    }
+
+    if (code === "auth/user-not-found") {
+      return "No account found with that email.";
+    }
+  }
+
+  return error instanceof Error ? error.message : "Something went wrong. Please try again.";
+};
+
 const AuthForm = ({ type }: { type: FormType }) => {
   const router = useRouter();
 
@@ -103,11 +123,12 @@ const AuthForm = ({ type }: { type: FormType }) => {
       }
     } catch (error) {
       console.log(error);
-      toast.error(`There was an error: ${error}`);
+      toast.error(getAuthErrorMessage(error));
     }
   };
 
   const isSignIn = type === "sign-in";
+  const isSubmitting = form.formState.isSubmitting;
 
   return (
     <div className="card-border lg:min-w-[566px]">
@@ -150,8 +171,14 @@ const AuthForm = ({ type }: { type: FormType }) => {
               type="password"
             />
 
-            <Button className="btn" type="submit">
-              {isSignIn ? "Sign In" : "Create an Account"}
+            <Button className="btn" type="submit" disabled={isSubmitting}>
+              {isSubmitting
+                ? isSignIn
+                  ? "Signing In..."
+                  : "Creating Account..."
+                : isSignIn
+                  ? "Sign In"
+                  : "Create an Account"}
             </Button>
           </form>
         </Form>
