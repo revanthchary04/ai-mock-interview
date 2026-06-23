@@ -11,6 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 
@@ -43,6 +44,11 @@ const AuthForm = ({ type }: { type: FormType }) => {
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
+      if (!auth) {
+        toast.error("Firebase web configuration is missing.");
+        return;
+      }
+
       if (type === "sign-up") {
         const { name, email, password } = data;
 
@@ -60,6 +66,7 @@ const AuthForm = ({ type }: { type: FormType }) => {
         });
 
         if (!result.success) {
+          await deleteUser(userCredential.user);
           toast.error(result.message);
           return;
         }
@@ -81,12 +88,17 @@ const AuthForm = ({ type }: { type: FormType }) => {
           return;
         }
 
-        await signIn({
+        const result = await signIn({
           email,
           idToken,
         });
 
-        toast.success("Signed in successfully.");
+        if (!result.success) {
+          toast.error(result.message);
+          return;
+        }
+
+        toast.success(result.message);
         router.push("/");
       }
     } catch (error) {

@@ -1,12 +1,15 @@
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
-
 type AdminServiceAccount = {
   projectId: string;
   clientEmail: string;
   privateKey: string;
 };
+
+type AdminClients = {
+  auth: Awaited<ReturnType<typeof import("firebase-admin/auth").getAuth>>;
+  db: Awaited<ReturnType<typeof import("firebase-admin/firestore").getFirestore>>;
+};
+
+let adminClientsPromise: Promise<AdminClients> | null = null;
 
 function normalizePrivateKey(privateKey?: string) {
   return privateKey?.replace(/\\n/g, "\n");
@@ -66,21 +69,40 @@ function getServiceAccount(): AdminServiceAccount {
   };
 }
 
-function initFirebaseAdmin() {
-  const apps = getApps();
+async function initFirebaseAdmin(): Promise<AdminClients> {
+  if (!adminClientsPromise) {
+    adminClientsPromise = (async () => {
+      const [{ initializeApp, getApps, cert }, { getAuth }, { getFirestore }] =
+        await Promise.all([
+          import("firebase-admin/app"),
+          import("firebase-admin/auth"),
+          import("firebase-admin/firestore"),
+        ]);
 
-  if (!apps.length) {
-    const serviceAccount = getServiceAccount();
+      const apps = getApps();
 
-    initializeApp({
-      credential: cert(serviceAccount),
-    });
+      if (!apps.length) {
+        const serviceAccount = getServiceAccount();
+
+        initializeApp({
+          credential: cert(serviceAccount),
+        });
+      }
+
+      return {
+        auth: getAuth(),
+        db: getFirestore(),
+      };
+    })();
   }
 
-  return {
-    auth: getAuth(),
-    db: getFirestore(),
-  };
+  return adminClientsPromise;
 }
 
-export const { auth, db } = initFirebaseAdmin();
+export async function getAdminAuth() {
+  return (await initFirebaseAdmin()).auth;
+}
+
+export async function getAdminDb() {
+  return (await initFirebaseAdmin()).db;
+}

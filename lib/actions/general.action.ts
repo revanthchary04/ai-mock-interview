@@ -3,13 +3,15 @@
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
 
-import { db } from "@/firebase/admin";
+import { getAdminDb } from "@/firebase/admin";
 import { feedbackSchema } from "@/constants";
 
 export async function createFeedback(params: CreateFeedbackParams) {
   const { interviewId, userId, transcript, feedbackId } = params;
 
   try {
+    const db = await getAdminDb();
+
     const formattedTranscript = transcript
       .map(
         (sentence: { role: string; content: string }) =>
@@ -67,27 +69,41 @@ export async function createFeedback(params: CreateFeedbackParams) {
 }
 
 export async function getInterviewById(id: string): Promise<Interview | null> {
-  const interview = await db.collection("interviews").doc(id).get();
+  try {
+    const db = await getAdminDb();
+    const interview = await db.collection("interviews").doc(id).get();
 
-  return interview.data() as Interview | null;
+    return interview.data() as Interview | null;
+  } catch (error) {
+    console.error("Failed to load interview:", error);
+    return null;
+  }
 }
 
 export async function getFeedbackByInterviewId(
   params: GetFeedbackByInterviewIdParams
 ): Promise<Feedback | null> {
   const { interviewId, userId } = params;
+  if (!interviewId || !userId) return null;
 
-  const querySnapshot = await db
-    .collection("feedback")
-    .where("interviewId", "==", interviewId)
-    .where("userId", "==", userId)
-    .limit(1)
-    .get();
+  try {
+    const db = await getAdminDb();
 
-  if (querySnapshot.empty) return null;
+    const querySnapshot = await db
+      .collection("feedback")
+      .where("interviewId", "==", interviewId)
+      .where("userId", "==", userId)
+      .limit(1)
+      .get();
 
-  const feedbackDoc = querySnapshot.docs[0];
-  return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
+    if (querySnapshot.empty) return null;
+
+    const feedbackDoc = querySnapshot.docs[0];
+    return { id: feedbackDoc.id, ...feedbackDoc.data() } as Feedback;
+  } catch (error) {
+    console.error("Failed to load feedback:", error);
+    return null;
+  }
 }
 
 export async function getLatestInterviews(
@@ -95,33 +111,48 @@ export async function getLatestInterviews(
 ): Promise<Interview[] | null> {
   const { userId, limit = 20 } = params;
 
-  const interviews = await db
-    .collection("interviews")
-    .where("finalized", "==", true)
-    .get();
+  try {
+    const db = await getAdminDb();
 
-  return interviews.docs
-    .map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-    .filter((interview) => interview.userId !== userId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, limit) as Interview[];
+    const interviews = await db
+      .collection("interviews")
+      .where("finalized", "==", true)
+      .get();
+
+    return interviews.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter((interview) => interview.userId !== userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit) as Interview[];
+  } catch (error) {
+    console.error("Failed to load latest interviews:", error);
+    return [];
+  }
 }
 
 export async function getInterviewsByUserId(
   userId: string
 ): Promise<Interview[] | null> {
-  const interviews = await db
-    .collection("interviews")
-    .where("userId", "==", userId)
-    .get();
+  if (!userId) return [];
 
-  return interviews.docs
-    .map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt)) as Interview[];
+  try {
+    const db = await getAdminDb();
+    const interviews = await db
+      .collection("interviews")
+      .where("userId", "==", userId)
+      .get();
+
+    return interviews.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)) as Interview[];
+  } catch (error) {
+    console.error("Failed to load user interviews:", error);
+    return [];
+  }
 }

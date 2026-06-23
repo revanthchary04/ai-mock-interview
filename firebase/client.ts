@@ -1,10 +1,6 @@
-// Import the functions you need from the SDKs you need
 import { getApp, getApps, initializeApp } from "firebase/app";
-// import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
 function getFirebaseClientConfig() {
   const projectId =
@@ -29,18 +25,18 @@ function getFirebaseClientConfig() {
   ].filter(Boolean);
 
   if (missingVars.length) {
-    throw new Error(
-      `Missing Firebase web configuration: ${missingVars.join(", ")}. ` +
-        "Add the Firebase Web App config from Firebase Console > Project settings > Your apps."
-    );
+    return null;
   }
 
   return firebaseConfig;
 }
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(getFirebaseClientConfig()) : getApp();
-// const analytics = getAnalytics(app);
+const firebaseConfig = getFirebaseClientConfig();
+const app = firebaseConfig
+  ? !getApps().length
+    ? initializeApp(firebaseConfig)
+    : getApp()
+  : null;
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
