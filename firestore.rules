@@ -1,0 +1,251 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: auth.uid
+    // Fields:
+    //   - name: string (required, 3-80 chars)
+    //   - email: string (required, valid email, immutable after create)
+    //
+    // Collection: interviews
+    // Document ID: auto ID
+    // Fields:
+    //   - role: string (required, 2-80 chars)
+    //   - type: string (required, 2-40 chars)
+    //   - level: string (required, 2-40 chars)
+    //   - techstack: list<string> (required, 1-20 entries)
+    //   - questions: list<string> (required, 1-20 entries)
+    //   - userId: string (required, auth.uid, immutable)
+    //   - finalized: bool (required)
+    //   - coverImage: string (required, app-local asset path)
+    //   - createdAt: string (required, ISO-ish date string, immutable)
+    //
+    // Collection: feedback
+    // Document ID: auto ID
+    // Fields:
+    //   - interviewId: string (required)
+    //   - userId: string (required, auth.uid, immutable)
+    //   - totalScore: number (required, 0-100)
+    //   - categoryScores: list (required, 1-10 entries)
+    //   - strengths: list<string> (required, 0-10 entries)
+    //   - areasForImprovement: list<string> (required, 0-10 entries)
+    //   - finalAssessment: string (required, 1-4000 chars)
+    //   - createdAt: string (required, ISO-ish date string, immutable)
+    //
+    // Notes:
+    // - This project currently uses the Firebase Admin SDK for Firestore access
+    //   in server actions and route handlers, so those server-side operations
+    //   bypass these rules.
+    // - These rules are a prototype for securing any future direct client access.
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validString(field, minLen, maxLen) {
+      return request.resource.data[field] is string
+        && request.resource.data[field].size() >= minLen
+        && request.resource.data[field].size() <= maxLen;
+    }
+
+    function validExistingString(data, field, minLen, maxLen) {
+      return data[field] is string
+        && data[field].size() >= minLen
+        && data[field].size() <= maxLen;
+    }
+
+    function isValidEmailValue(email) {
+      return email is string
+        && email.size() <= 320
+        && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateStringValue(dateStr) {
+      return dateStr is string
+        && dateStr.size() >= 20
+        && dateStr.size() <= 40
+        && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z$");
+    }
+
+    function isValidTechstack(listValue) {
+      return listValue is list && listValue.size() > 0 && listValue.size() <= 20;
+    }
+
+    function isValidQuestions(listValue) {
+      return listValue is list && listValue.size() > 0 && listValue.size() <= 20;
+    }
+
+    function isValidStringList(listValue, maxSize) {
+      return listValue is list && listValue.size() <= maxSize;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(["name", "email"])
+        && data.keys().hasAll(["name", "email"])
+        && data.name is string
+        && data.name.size() >= 3
+        && data.name.size() <= 80
+        && isValidEmailValue(data.email);
+    }
+
+    function isValidInterview(data) {
+      return data.keys().hasOnly([
+          "role",
+          "type",
+          "level",
+          "techstack",
+          "questions",
+          "userId",
+          "finalized",
+          "coverImage",
+          "createdAt"
+        ])
+        && data.keys().hasAll([
+          "role",
+          "type",
+          "level",
+          "techstack",
+          "questions",
+          "userId",
+          "finalized",
+          "coverImage",
+          "createdAt"
+        ])
+        && data.role is string
+        && data.role.size() >= 2
+        && data.role.size() <= 80
+        && data.type is string
+        && data.type.size() >= 2
+        && data.type.size() <= 40
+        && data.level is string
+        && data.level.size() >= 2
+        && data.level.size() <= 40
+        && isValidTechstack(data.techstack)
+        && isValidQuestions(data.questions)
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.finalized is bool
+        && data.coverImage is string
+        && data.coverImage.size() >= 1
+        && data.coverImage.size() <= 200
+        && data.coverImage.matches("^/covers/.*")
+        && isValidDateStringValue(data.createdAt);
+    }
+
+    function isValidFeedback(data) {
+      return data.keys().hasOnly([
+          "interviewId",
+          "userId",
+          "totalScore",
+          "categoryScores",
+          "strengths",
+          "areasForImprovement",
+          "finalAssessment",
+          "createdAt"
+        ])
+        && data.keys().hasAll([
+          "interviewId",
+          "userId",
+          "totalScore",
+          "categoryScores",
+          "strengths",
+          "areasForImprovement",
+          "finalAssessment",
+          "createdAt"
+        ])
+        && data.interviewId is string
+        && data.interviewId.size() >= 1
+        && data.interviewId.size() <= 200
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.totalScore is number
+        && data.totalScore >= 0
+        && data.totalScore <= 100
+        && data.categoryScores is list
+        && data.categoryScores.size() > 0
+        && data.categoryScores.size() <= 10
+        && isValidStringList(data.strengths, 10)
+        && isValidStringList(data.areasForImprovement, 10)
+        && data.finalAssessment is string
+        && data.finalAssessment.size() >= 1
+        && data.finalAssessment.size() <= 4000
+        && isValidDateStringValue(data.createdAt);
+    }
+
+    function interviewImmutableFieldsUnchanged() {
+      return request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function feedbackImmutableFieldsUnchanged() {
+      return request.resource.data.userId == resource.data.userId
+        && request.resource.data.interviewId == resource.data.interviewId
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{userId} {
+      allow create: if isOwner(userId)
+        && isValidUser(request.resource.data);
+
+      allow read: if isOwner(userId);
+
+      allow update: if isOwner(userId)
+        && isValidUser(request.resource.data)
+        && request.resource.data.email == resource.data.email;
+
+      allow delete: if false;
+    }
+
+    match /interviews/{interviewId} {
+      allow create: if isAuthenticated()
+        && isValidInterview(request.resource.data);
+
+      allow read: if isAuthenticated()
+        && (
+          isOwner(resource.data.userId)
+          || resource.data.finalized == true
+        );
+
+      allow update: if isOwner(resource.data.userId)
+        && isValidInterview(request.resource.data)
+        && interviewImmutableFieldsUnchanged();
+
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /feedback/{feedbackId} {
+      allow create: if isAuthenticated()
+        && isValidFeedback(request.resource.data);
+
+      allow read: if isOwner(resource.data.userId);
+
+      allow update: if isOwner(resource.data.userId)
+        && isValidFeedback(request.resource.data)
+        && feedbackImmutableFieldsUnchanged();
+
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
